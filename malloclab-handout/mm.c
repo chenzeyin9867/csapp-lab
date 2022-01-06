@@ -14,7 +14,6 @@
 #include <assert.h>
 #include <unistd.h>
 #include <string.h>
-
 #include "mm.h"
 #include "memlib.h"
 /**
@@ -22,6 +21,7 @@
  * 
  */
 /* Basic constants and macros */
+#define printf(format, ...)
 #define WSIZE 4 /* Word and header/footer size (bytes) */
 #define DSIZE 8 /* Double word size (bytes) */
 #define CHUNKSIZE (1<<12) /* Extend heap by this amount (bytes) */
@@ -87,6 +87,7 @@ int mm_init(void)
     heap_listp += 2 * WSIZE; 
     /* Extend the empty heap with a free block of CHUNKSIZE bytes */
     extend_heap(CHUNKSIZE/WSIZE);
+    printf("The heap_listp is %x\n", heap_listp);
         // return -1;
     return 0;
 }
@@ -99,6 +100,7 @@ void *mm_malloc(size_t size)
 {
     if(size == 0) return NULL;
     int newsize = ALIGN(size + SIZE_T_SIZE);
+    printf("size:%d\taligned_size%d\t", size, newsize);
     /* Traverse from the plist */
     char * bp = heap_listp;
     int found = 0;
@@ -115,7 +117,7 @@ void *mm_malloc(size_t size)
         /* split this block into two blocks */
         size_t origin_size = GET_SIZE(HDRP(bp));
         PUT(HDRP(bp), PACK(newsize, 1)); // flag as allocated
-        PUT(HDRP(bp), PACK(newsize, 1));
+        PUT(FTRP(bp), PACK(newsize, 1));
         
         size_t left = origin_size - newsize;
         if(left > 0){
@@ -123,12 +125,30 @@ void *mm_malloc(size_t size)
             PUT(HDRP(next), PACK(left, 0));
             PUT(FTRP(next), PACK(left, 0));
         }
+        printf("found, alloc in %x\tnext:%x\tleft:%d\n", bp, NEXT_BLKP(bp), left);
         return bp;
     }else{
         // call sbrk
-        void *p = extend_heap(newsize);
-        return p;
+        size_t alloc_size = MAX(CHUNKSIZE, newsize);
+        char* newp = extend_heap(alloc_size / WSIZE);
+        bp = newp;
+        printf("sbrk,  alloc in %x\n", bp);
+        size_t origin_size = GET_SIZE(HDRP(bp));
+        PUT(HDRP(bp), PACK(newsize, 1));
+        PUT(FTRP(bp), PACK(newsize, 1));
+        
+        size_t left = origin_size - newsize;
+        printf("alloc_size:[%d]\torigin_size:[%d]\tLeft:%d\n", alloc_size, origin_size, left);
+        if(left > 0){
+            char *next = NEXT_BLKP(bp);
+            PUT(HDRP(next), PACK(left, 0));
+            PUT(FTRP(next), PACK(left, 0));
+        }
+        printf("End sbrk, OK\n");
+        return bp;
     }  
+
+    
 
 }
 
@@ -137,8 +157,10 @@ void *mm_malloc(size_t size)
  */
 void mm_free(void *ptr)
 {
-    PUT(HDRP(ptr), PACK(GET_SIZE(HDRP(ptr)), 0)); /* set header free*/
-    PUT(FTRP(ptr), PACK(GET_SIZE(FTRP(ptr)), 0)); /* set footer free*/
+    printf("Free %x\tsize: %d\n", ptr, GET_SIZE(HDRP(ptr)));
+    size_t size = GET_SIZE(HDRP(ptr));
+    PUT(HDRP(ptr), PACK(size, 0)); /* set header free*/
+    PUT(FTRP(ptr), PACK(size, 0)); /* set footer free*/
     coalesce(ptr); /* coalesce adjecnt blocks */
 }
 
@@ -179,7 +201,9 @@ static void *extend_heap(size_t words){
     PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1)); /* New epilogue header */
 
     /* Coalesce if the previous block was free */
-    return coalesce(bp);
+    char * ret = coalesce(bp);
+    printf("sbrk return in [0x%x]\n", ret);
+    return ret;
 }
 
 static void* coalesce(void *bp){
@@ -190,7 +214,8 @@ static void* coalesce(void *bp){
     // size_t prev_alloc = GET_ALLOC(HDRP(prev));
     size_t next_alloc = GET_ALLOC(HDRP(next));
     size_t cur_size = GET_SIZE(HDRP(bp));
-    /* situation 1: prev and next are all allocate */    
+    /* situation 1: prev and next are all allocate */   
+    printf("coalece, cur[%x] size[%d], prev_alloc:[%d], next_alloc:[%d]\n", bp, cur_size, prev_alloc, next_alloc); 
     if(prev_alloc == 1 && next_alloc == 1){
         return bp;
     }
@@ -208,18 +233,20 @@ static void* coalesce(void *bp){
     }
 
     /* Situation 3: prev free, next alloc */
-    if(GET_ALLOC(prev) == 0 && GET_ALLOC(next) == 1){
+    if(prev_alloc == 0 && next_alloc == 1){
+        printf("Prev_free: prev:[%x], size:[%d]\n", prev, GET_SIZE(HDRP(prev)));
         size_t prev_sz = GET_SIZE(HDRP(prev));
         cur_size += prev_sz;
         /* update new header and footer */
+        // PUT(HDRP(prev), PACK(cur_size, 0));
+        PUT(FTRP(bp), PACK(cur_size, 0));
         PUT(HDRP(prev), PACK(cur_size, 0));
-        PUT(FTRP(prev), PACK(cur_size, 0));
         return prev;
     }
 
     /* Situation 4: prev free, next free */
     if(prev_alloc == 0 && next_alloc == 0){
-        size_t new_sz = GET_SIZE(HDRP(prev)) + GET_SIZE(HDRP(bp)) + GET_SIZE(HDRP(next));
+        size_t new_sz = GET_SIZE(HDRP(prev)) + GET_SIZE(HDRP(bp)) + GET_SIZE(FTRP(next));
         /* update header and footer */
         PUT(HDRP(prev), PACK(new_sz, 0));
         PUT(FTRP(prev), PACK(new_sz, 0));
