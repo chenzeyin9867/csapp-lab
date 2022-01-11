@@ -2,6 +2,10 @@
     "files.associations": {
         "stdio.h": "c",
         "cachelab.h": "c",
-        "unistd.h": "c"
+        "unistd.h": "c",
+        "fsecs.h": "c",
+        "clock.h": "c",
+        "ftimer.h": "c",
+        "config.h": "c"
     }
 }
