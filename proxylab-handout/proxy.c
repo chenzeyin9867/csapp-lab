@@ -198,7 +198,7 @@ void clienterror(int fd, char *cause, char *errnum,
 }
 /* $end clienterror */
 
-
+ 
 /**
  *  Generate the request header
  */
