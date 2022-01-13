@@ -56,16 +56,20 @@ void doit(int fd)
     rio_t rio;
 
     /* Read request line and headers */
+    
     Rio_readinitb(&rio, fd);
     if (!Rio_readlineb(&rio, buf, MAXLINE))  //line:netp:doit:readrequest
         return;
+    
     printf("%s", buf);
     sscanf(buf, "%s %s %s", method, uri, version);       //line:netp:doit:parserequest
+    printf("method:%s uri:%s version:%s\ntiny recv the request\n", method, uri, version);
     if (strcasecmp(method, "GET")) {                     //line:netp:doit:beginrequesterr
         clienterror(fd, method, "501", "Not Implemented",
                     "Tiny does not implement this method");
         return;
-    }                                                    //line:netp:doit:endrequesterr
+    }  
+    printf("tiny read request_hdrs\n");                                                  //line:netp:doit:endrequesterr
     read_requesthdrs(&rio);                              //line:netp:doit:readrequesthdrs
 
     /* Parse URI from GET request */
@@ -77,18 +81,18 @@ void doit(int fd)
     }                                                    //line:netp:doit:endnotfound
 
     if (is_static) { /* Serve static content */          
-	if (!(S_ISREG(sbuf.st_mode)) || !(S_IRUSR & sbuf.st_mode)) { //line:netp:doit:readable
-	    clienterror(fd, filename, "403", "Forbidden",
-			"Tiny couldn't read the file");
-	    return;
-	}
-	serve_static(fd, filename, sbuf.st_size);        //line:netp:doit:servestatic
+        if (!(S_ISREG(sbuf.st_mode)) || !(S_IRUSR & sbuf.st_mode)) { //line:netp:doit:readable
+            clienterror(fd, filename, "403", "Forbidden",
+                "Tiny couldn't read the file");
+            return;
+        }
+        serve_static(fd, filename, sbuf.st_size);        //line:netp:doit:servestatic
     }
     else { /* Serve dynamic content */
-	if (!(S_ISREG(sbuf.st_mode)) || !(S_IXUSR & sbuf.st_mode)) { //line:netp:doit:executable
-	    clienterror(fd, filename, "403", "Forbidden",
-			"Tiny couldn't run the CGI program");
-	    return;
+        if (!(S_ISREG(sbuf.st_mode)) || !(S_IXUSR & sbuf.st_mode)) { //line:netp:doit:executable
+            clienterror(fd, filename, "403", "Forbidden",
+                "Tiny couldn't run the CGI program");
+            return;
 	}
 	serve_dynamic(fd, filename, cgiargs);            //line:netp:doit:servedynamic
     }
@@ -153,7 +157,7 @@ void serve_static(int fd, char *filename, int filesize)
 {
     int srcfd;
     char *srcp, filetype[MAXLINE], buf[MAXBUF];
-
+    printf("tiny serve static\n");
     /* Send response headers to client */
     get_filetype(filename, filetype);    //line:netp:servestatic:getfiletype
     sprintf(buf, "HTTP/1.0 200 OK\r\n"); //line:netp:servestatic:beginserve
@@ -171,6 +175,7 @@ void serve_static(int fd, char *filename, int filesize)
     Close(srcfd);                       //line:netp:servestatic:close
     Rio_writen(fd, srcp, filesize);     //line:netp:servestatic:write
     Munmap(srcp, filesize);             //line:netp:servestatic:munmap
+    printf("tiny server end\n");
 }
 
 /*
